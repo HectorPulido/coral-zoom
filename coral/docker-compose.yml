@@ -1,0 +1,10 @@
+services:
+  coral-server: 
+    privileged: true # Required for USB access
+    restart: always
+    build: .
+    command: python3 main.py
+    ports:
+      - "5069:5069"
+    volumes:
+      - ./source:/source

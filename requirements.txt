@@ -1,3 +1,7 @@
 tensorflow
 pillow==10.3.0
 typer==0.12.3
+opencv-python==4.10.0.84
+tf_keras==2.16.0
+matplotlib==3.9.0
+tensorflow-datasets==4.9.6

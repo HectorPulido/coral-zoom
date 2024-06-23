@@ -44,36 +44,62 @@ def random_rotate(lowres_img, highres_img):
     return tf.image.rot90(lowres_img, rn), tf.image.rot90(highres_img, rn)
 
 
-def random_crop(lowres_img, highres_img, hr_crop_size=256, scale=4):
+def random_rescale(image_hr, hr_crop_size, scale):
+    """
+    Rescales the image to a different size.
+    Then rescales it back to the original size.
+    Losing some information.
+    """
+
+    image_lr = tf.image.resize(
+        image_hr,
+        (hr_crop_size // scale, hr_crop_size // scale),
+        method=tf.image.ResizeMethod.NEAREST_NEIGHBOR,
+    )
+
+    image_lr = tf.image.resize(
+        image_lr,
+        (hr_crop_size, hr_crop_size),
+        method=tf.image.ResizeMethod.BILINEAR,
+    )
+
+    return image_lr
+
+
+def random_crop(_, highres_img, hr_crop_size=256, scale=2):
     """Crop images.
 
     low resolution images: 64x64
     high resolution images: 256x256
     """
-    lowres_crop_size = hr_crop_size // scale  # 96//4=24
-    lowres_img_shape = tf.shape(lowres_img)[:2]  # (height,width)
 
-    lowres_width = tf.random.uniform(
-        shape=(), maxval=lowres_img_shape[1] - lowres_crop_size + 1, dtype=tf.int32
+    # lowres_img, highres_img = random_rescale(highres_img, _lowres_img_scale)
+    # lowres_crop_size = hr_crop_size // scale  # 96//4=24
+    # lowres_img_shape = tf.shape(lowres_img)[:2]  # (height,width)
+
+    # lowres_width = tf.random.uniform(
+    #     shape=(), maxval=lowres_img_shape[1] - lowres_crop_size + 1, dtype=tf.int32
+    # )
+    # lowres_height = tf.random.uniform(
+    #     shape=(), maxval=lowres_img_shape[0] - lowres_crop_size + 1, dtype=tf.int32
+    # )
+
+    # highres_width = lowres_width * scale
+    # highres_height = lowres_height * scale
+
+    hr_shape = tf.shape(highres_img)[:2]
+    width = tf.random.uniform(
+        shape=(), maxval=hr_shape[1] - hr_crop_size + 1, dtype=tf.int32
     )
-    lowres_height = tf.random.uniform(
-        shape=(), maxval=lowres_img_shape[0] - lowres_crop_size + 1, dtype=tf.int32
+    height = tf.random.uniform(
+        shape=(), maxval=hr_shape[0] - hr_crop_size + 1, dtype=tf.int32
     )
-
-    highres_width = lowres_width * scale
-    highres_height = lowres_height * scale
-
-    lowres_img_cropped = lowres_img[
-        lowres_height : lowres_height + lowres_crop_size,
-        lowres_width : lowres_width + lowres_crop_size,
-    ]  # 24x24
-
     highres_img_cropped = highres_img[
-        highres_height : highres_height + hr_crop_size,
-        highres_width : highres_width + hr_crop_size,
-    ]  # 96x96
+        height : height + hr_crop_size, width : width + hr_crop_size
+    ]
+    lowres_img = random_rescale(highres_img_cropped, hr_crop_size, scale)
 
-    return lowres_img_cropped, highres_img_cropped
+    return lowres_img, highres_img_cropped
 
 
 def PSNR(super_resolution, high_resolution):
@@ -148,10 +174,10 @@ div2k_data.download_and_prepare()
 
 # Taking train data from div2k_data object
 train = div2k_data.as_dataset(split="train", as_supervised=True)
-train_cache = train.cache()
+train_cache = train
 # Validation data
 val = div2k_data.as_dataset(split="validation", as_supervised=True)
-val_cache = val.cache()
+val_cache = val
 
 train_ds = dataset_object(train_cache, training=True)
 val_ds = dataset_object(val_cache, training=True)

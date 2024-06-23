@@ -6,7 +6,7 @@ app = typer.Typer()
 
 @app.command()
 def train_model(
-    model_path: str = "../models/", model_name: str = "edsr-13", epochs: int = 150
+    model_path: str = "../models/", model_name: str = "net-0", epochs: int = 150
 ):
     import tensorflow as tf
     from tensorflow import keras
@@ -17,8 +17,7 @@ def train_model(
     model = make_model(
         lr_shape=(None, None, 3),  # The shape can not have None values
         num_filters=16,
-        num_of_residual_blocks_a=8,
-        num_of_residual_blocks_b=2,
+        num_of_residual_blocks_a=2,
     )
 
     optim_edsr = keras.optimizers.Adam(5e-04, beta_1=0.5)
@@ -55,7 +54,7 @@ def train_model(
         model.fit(
             dataset,
             epochs=te,
-            steps_per_epoch=512,
+            steps_per_epoch=256,
             validation_data=val_ds,
             callbacks=[tb_callback, learning_rate_reduction],
         )
@@ -69,7 +68,7 @@ def train_model(
 
 @app.command()
 def transform_checkpoint_to_tflite(
-    model_full_path: str, model_output_path: str, low_res_shape: str = "256x256"
+    model_full_path: str, model_output_path: str, img_shape: str = "256x256"
 ):
     # This is a workaround to use the legacy keras API
     import os
@@ -79,24 +78,41 @@ def transform_checkpoint_to_tflite(
     import tensorflow as tf
     from model import make_model
 
-    lr_shape = tuple(map(int, low_res_shape.split("x")))
+    lr_shape = (*tuple(map(int, img_shape.split("x"))), 3)
+
+    # Change this for a real representative dataset
+    def representative_data_gen():
+        num_calibration_images = 10
+        for _ in range(num_calibration_images):
+            image = tf.random.normal([1] + list(lr_shape))
+            yield [image]
 
     model = make_model(
         lr_shape=lr_shape,
         num_filters=16,
-        num_of_residual_blocks_a=8,
-        num_of_residual_blocks_b=2,
+        num_of_residual_blocks_a=2,
+        batch_size=1,
     )
 
     model.load_weights(model_full_path)
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    # This enables quantization
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    # This sets the representative dataset for quantization
+    converter.representative_dataset = representative_data_gen
+    # This ensures that if any ops can't be quantized, the converter throws an error
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+    # For full integer quantization, though supported types defaults to int8 only, we explicitly declare it for clarity.
+    converter.target_spec.supported_types = [tf.int8]
+    # These set the input and output tensors to uint8 (added in r2.3)
+    converter.inference_input_type = tf.uint8
+    converter.inference_output_type = tf.uint8
     tflite_model = converter.convert()
 
     # Save the model.
-    with open("model.tflite", "wb") as f:
+    with open(model_output_path, "wb") as f:
         f.write(tflite_model)
-        print(f"Model saved in {model_output_path}")
 
 
 if __name__ == "__main__":
